@@ -2,19 +2,24 @@ package main
 
 import (
 	"encoding/json"
+	"github.com/gorilla/mux"
 	"github.com/nlopes/slack"
 	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
+	"time"
 )
 
 func main() {
 	apiKey := os.Getenv("API_KEY")
-	router := http.NewServeMux()
+	router := mux.NewRouter()
 
 	router.HandleFunc("/order", Order(apiKey))
+
+	router.Use(LogMiddleware)
+	router.Use(PanicMiddleware)
 
 	if err := http.ListenAndServe(":8443", router); err != nil {
 		log.Println(err)
@@ -55,4 +60,26 @@ func Order(apiKey string) func(http.ResponseWriter, *http.Request) {
 			w.WriteHeader(http.StatusInternalServerError)
 		}
 	}
+}
+
+func LogMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		timeReq := time.Now()
+		defer func(start time.Time) {
+			log.Println(r.URL.Path, time.Since(start))
+		}(timeReq)
+		next.ServeHTTP(w, r)
+	})
+}
+
+func PanicMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if err := recover(); err != nil {
+				log.Println("recovered", err)
+				http.Error(w, "Internal server error", http.StatusInternalServerError)
+			}
+		}()
+		next.ServeHTTP(w, r)
+	})
 }
