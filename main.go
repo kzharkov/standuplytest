@@ -7,10 +7,11 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
 )
 
 func main() {
-	apiKey := "xoxp-770274988487-770274988743-770642068102-6163d973a4d1d798cdf96bf0a01c8dc8"
+	apiKey := os.Getenv("API_KEY")
 	router := http.NewServeMux()
 
 	router.HandleFunc("/order", Order(apiKey))
