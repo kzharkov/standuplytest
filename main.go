@@ -1,16 +1,18 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
-	"fmt"
 	"github.com/gorilla/mux"
+	"github.com/jackc/pgx/v4"
 	"github.com/nlopes/slack"
 	database "github.com/sirkz/standuplytest/db"
 	log "github.com/sirupsen/logrus"
 	"io"
 	"io/ioutil"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -27,6 +29,11 @@ func main() {
 		log.Warn(err)
 		return
 	}
+	defer func() {
+		err = db.Close(context.Background())
+		log.Warn(err)
+	}()
+	log.Info("Connect to database")
 
 	syncDB := flag.Bool("sync-db", false, "Creates all necessary tables")
 
@@ -46,7 +53,7 @@ func main() {
 
 	router = router.PathPrefix("/api/v1").Subrouter()
 
-	router.HandleFunc("/order", Order(config.ApiKey)).Methods("POST")
+	router.HandleFunc("/order", Order(config.ApiKey, db)).Methods("POST")
 
 	router.Use(LogMiddleware)
 	router.Use(PanicMiddleware)
@@ -56,7 +63,7 @@ func main() {
 	}
 }
 
-func Order(apiKey string) func(http.ResponseWriter, *http.Request) {
+func Order(apiKey string, db *pgx.Conn) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		verifier, err := slack.NewSecretsVerifier(r.Header, apiKey)
 		if err != nil {
@@ -77,13 +84,45 @@ func Order(apiKey string) func(http.ResponseWriter, *http.Request) {
 			return
 		}
 
-		nameIndex := strings.IndexByte(s.Text, ' ')
-		fmt.Println(s.Text[:nameIndex])
-		sizeIndex := strings.IndexByte(s.Text, ' ')
-		fmt.Println(s.Text[nameIndex:sizeIndex])
-		fmt.Println(s.Text[sizeIndex:])
+		createOrder(s, w, db)
 		sendMsg(slack.Msg{Text: "Your order has been accepted and is being processed"}, w)
 	}
+}
+
+func createOrder(s slack.SlashCommand, w http.ResponseWriter, db *pgx.Conn) {
+	params := strings.SplitN(s.Text, " ", 3)
+	if len(params) < 3 {
+		sendMsg(slack.Msg{Text: "First enter the name of the pizza, then the size and address"}, w)
+		return
+	}
+	pizza := params[0]
+	size, err := strconv.Atoi(params[1])
+	if err != nil {
+		sendMsg(slack.Msg{Text: "Invalid size"}, w)
+		return
+	}
+	address := params[2]
+
+	userId, err := database.FindUserIdBySlackId(db, s.UserID)
+	if err != nil {
+		log.Error(err)
+		return
+	}
+	if userId == "-1" {
+		userId, err = database.CreateUser(db, s.UserID, s.UserName)
+		if err != nil {
+			log.Error(err)
+			return
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+	_, err = db.Exec(ctx, "INSERT INTO orders(user_id, pizza, size, address) VALUES ($1, $2, $3, $4);", userId, pizza, size, address)
+	if err != nil {
+		log.Error(err)
+	}
+	return
 }
 
 func LogMiddleware(next http.Handler) http.Handler {
@@ -100,7 +139,7 @@ func PanicMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if err := recover(); err != nil {
-				log.Error("recovered", err)
+				log.Error("recovered ", err)
 				http.Error(w, "Internal server error", http.StatusInternalServerError)
 			}
 		}()
