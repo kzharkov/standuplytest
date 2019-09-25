@@ -5,6 +5,7 @@ go 1.12
 require (
 	github.com/coreos/go-systemd v0.0.0-20190719114852-fd7a80b32e1f // indirect
 	github.com/gofrs/uuid v3.2.0+incompatible
+	github.com/google/uuid v1.1.1 // indirect
 	github.com/gorilla/mux v1.7.3
 	github.com/jackc/pgx/v4 v4.0.1
 	github.com/konsorten/go-windows-terminal-sequences v1.0.2 // indirect

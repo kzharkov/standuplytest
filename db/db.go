@@ -58,26 +58,30 @@ func CreateUser(db *pgx.Conn, slackId string, name string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	log.Println(userId)
 	_, err = db.Exec(context.Background(), "INSERT INTO users(id, name, slack_id) VALUES ($1, $2, $3);", userId, name, slackId)
 	if err != nil {
+		log.Println(err)
 		return "", err
 	}
 	return userId.String(), nil
 }
 
 func FindUserIdBySlackId(db *pgx.Conn, slackId string) (string, error) {
-	var userID string
 	rows, err := db.Query(context.Background(), "SELECT id FROM users WHERE slack_id = $1;", slackId)
 	if err != nil {
 		return "", err
 	}
 	defer rows.Close()
-	if rows.Next() {
-		return "-1", err
-	}
-	err = rows.Scan(&userID)
+	ids, err := rows.Values()
 	if err != nil {
 		return "", err
 	}
-	return userID, nil
+	log.Println(ids)
+	if len(ids) == 0 {
+		return "-1", err
+	}
+	var userId uuid.UUID
+	userId = ids[0].([16]uint8)
+	return userId.String(), nil
 }
