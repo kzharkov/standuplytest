@@ -3,6 +3,8 @@ FROM golang:alpine AS builder
 RUN groupadd --gid 2000 standuplytest \
   && useradd --uid 2000 --gid standuplytest --shell /bin/bash --create-home standuplytest
 
+USER 2000
+
 COPY . $GOPATH/src/github.com/kzharkov/standuplytest
 WORKDIR $GOPATH/src/github.com/kzharkov/standuplytest
 
