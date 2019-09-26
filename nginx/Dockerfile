@@ -1,0 +1,5 @@
+FROM nginx:alpine
+
+COPY nginx.conf /etc/nginx/sites-available/default
+
+EXPOSE 2083

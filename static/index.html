@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Orders</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
+</head>
+<body style="margin: 15px">
+<script>
+    function tableCreate(orders) {
+        console.log(orders);
+        let body = document.getElementsByTagName('body')[0];
+        let tbl = document.createElement('table');
+        tbl.style.width = '100%';
+        tbl.classList.add('table-striped');
+        let tbdy = document.createElement('tbody');
+        let tr = document.createElement('tr');
+        let th = document.createElement('th');
+        th.appendChild(document.createTextNode("number"));
+        tr.appendChild(th);
+        th = document.createElement('th');
+        th.appendChild(document.createTextNode("pizza"));
+        tr.appendChild(th);
+        th = document.createElement('th');
+        th.appendChild(document.createTextNode("size"));
+        tr.appendChild(th);
+        th = document.createElement('th');
+        th.appendChild(document.createTextNode("address"));
+        tr.appendChild(th);
+        tbdy.appendChild(tr);
+        for (let order of orders) {
+            let tr = document.createElement('tr');
+            let td = document.createElement('td');
+            td.appendChild(document.createTextNode(order.number));
+            tr.appendChild(td);
+            td = document.createElement('td');
+            td.appendChild(document.createTextNode(order.pizza));
+            tr.appendChild(td);
+            td = document.createElement('td');
+            td.appendChild(document.createTextNode(order.size));
+            tr.appendChild(td);
+            td = document.createElement('td');
+            td.appendChild(document.createTextNode(order.address));
+            tr.appendChild(td);
+            tbdy.appendChild(tr);
+        }
+        tbl.appendChild(tbdy);
+        body.appendChild(tbl)
+    }
+
+    fetch("http://localhost:8443/api/v1/listOrders")
+        .then(function (response) {
+            return response.json();
+        })
+        .then(function (result) {
+            tableCreate(result);
+        });
+</script>
+</body>
+</html>

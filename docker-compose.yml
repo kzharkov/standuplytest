@@ -1,0 +1,24 @@
+version: "3.5"
+
+services:
+  standuplytest:
+    depends_on:
+      - nginx
+    image: localhost:8443/admin/picotelemetry:latest
+    deploy:
+      replicas: 1
+    volumes:
+      - type: volume
+        source: certificates
+        target: /etc/ssl/certs
+
+  nginx:
+    image: localhost:8443/admin/nginx:latest
+    deploy:
+      replicas: 1
+    ports:
+      - 6000:6000
+
+volumes:
+  certificates:
+    external: true

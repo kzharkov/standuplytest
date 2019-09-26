@@ -12,6 +12,7 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -49,26 +50,44 @@ func main() {
 		return
 	}
 
+	indexFile, err := os.Open("static/index.html")
+	if err != nil {
+		log.Warn(err)
+		return
+	}
+	defer func() {
+		err = indexFile.Close()
+		log.Error(err)
+	}()
+
+	indexHtml, err := ioutil.ReadAll(indexFile)
+	if err != nil {
+		log.Error(err)
+		return
+	}
+
 	router := mux.NewRouter()
-
-	router = router.PathPrefix("/api/v1").Subrouter()
-
-	router.HandleFunc("/order", Order(config.ApiKey, db)).Methods("POST")
-
 	router.Use(LogMiddleware)
 	router.Use(PanicMiddleware)
+
+	router.HandleFunc("/", IndexHandle(indexHtml)).Methods("GET")
+
+	apiRouter := router.PathPrefix("/api/v1").Subrouter()
+
+	apiRouter.HandleFunc("/Order", SetOrder(config.ApiKey, db)).Methods("POST")
+	apiRouter.HandleFunc("/listOrders", ListOrders(db)).Methods("GET")
 
 	if err := http.ListenAndServe(":8443", router); err != nil {
 		log.Warn(err)
 	}
 }
 
-func Order(apiKey string, db *pgx.Conn) func(http.ResponseWriter, *http.Request) {
+func SetOrder(apiKey string, db *pgx.Conn) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		verifier, err := slack.NewSecretsVerifier(r.Header, apiKey)
 		if err != nil {
 			log.Error(err)
-			http.Error(w, "InternalError", 500)
+			w.WriteHeader(http.StatusInternalServerError)
 		}
 		r.Body = ioutil.NopCloser(io.TeeReader(r.Body, &verifier))
 		s, err := slack.SlashCommandParse(r)
@@ -85,7 +104,7 @@ func Order(apiKey string, db *pgx.Conn) func(http.ResponseWriter, *http.Request)
 		}
 
 		createOrder(s, w, db)
-		sendMsg(slack.Msg{Text: "Your order has been accepted and is being processed"}, w)
+		sendMsg(slack.Msg{Text: "Your Order has been accepted and is being processed"}, w)
 	}
 }
 
@@ -118,11 +137,53 @@ func createOrder(s slack.SlashCommand, w http.ResponseWriter, db *pgx.Conn) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
-	_, err = db.Exec(ctx, "INSERT INTO orders(user_id, pizza, size, address) VALUES ($1, $2, $3, $4);", userId, pizza, size, address)
+	_, err = db.Exec(ctx, "INSERT INTO Order(user_id, pizza, size, address) VALUES ($1, $2, $3, $4);", userId, pizza, size, address)
 	if err != nil {
 		log.Error(err)
 	}
 	return
+}
+
+type Order struct {
+	Number  int    `json:"number" db:"number"`
+	Pizza   string `json:"pizza" db:"pizza"`
+	Size    int    `json:"size" db:"size"`
+	Address string `json:"address" db:"address"`
+}
+
+func ListOrders(db *pgx.Conn) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var listOrders []Order
+		rows, err := db.Query(context.Background(), "SELECT number,pizza,size,address FROM orders;")
+		if err != nil {
+			log.Error(err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		defer rows.Close()
+		var order Order
+		for rows.Next() {
+			err = rows.Scan(&order.Number, &order.Pizza, &order.Size, &order.Address)
+			if err != nil {
+				log.Error(err)
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+			listOrders = append(listOrders, order)
+		}
+		listOrdersJson, err := json.Marshal(listOrders)
+		if err != nil {
+			log.Error(err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		_, err = w.Write(listOrdersJson)
+		if err != nil {
+			log.Error(err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+	}
 }
 
 func LogMiddleware(next http.Handler) http.Handler {
@@ -158,5 +219,15 @@ func sendMsg(msg slack.Msg, w http.ResponseWriter) {
 	if err != nil {
 		log.Error(err)
 		w.WriteHeader(http.StatusInternalServerError)
+	}
+}
+
+func IndexHandle(indexHTML []byte) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		_, err := w.Write(indexHTML)
+		if err != nil {
+			log.Error(err)
+			w.WriteHeader(http.StatusInternalServerError)
+		}
 	}
 }
