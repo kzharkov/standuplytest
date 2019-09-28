@@ -4,7 +4,7 @@ services:
   standuplytest:
     depends_on:
       - nginx
-    image: localhost:8443/admin/picotelemetry:latest
+    image: localhost:5000/admin/picotelemetry:latest
     deploy:
       replicas: 1
     volumes:
@@ -13,7 +13,7 @@ services:
         target: /etc/ssl/certs
 
   nginx:
-    image: localhost:8443/admin/nginx:latest
+    image: localhost:5000/admin/nginx:latest
     deploy:
       replicas: 1
     ports:
