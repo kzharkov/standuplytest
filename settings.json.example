@@ -1,0 +1,4 @@
+{
+  "api_key": "",
+  "config_db": "database= user=postgres password= sslmode=disable"
+}
